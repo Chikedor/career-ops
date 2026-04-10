@@ -1,15 +1,15 @@
-# Career-Ops
+# Career-Ops para Codex
 
 [English](README.md) | [Español](README.es.md)
 
 <p align="center">
-  <a href="https://x.com/santifer"><img src="docs/hero-banner.jpg" alt="Career-Ops — Sistema Multi-Agente de Busqueda de Empleo" width="800"></a>
+  <a href="https://github.com/santifer/career-ops"><img src="docs/hero-banner.jpg" alt="Career-Ops para Codex — Sistema local-first de busqueda de empleo con IA" width="800"></a>
 </p>
 
 <p align="center">
-  <em>Meses mandando CVs al vacio. Asi que me construi el sistema que echaba en falta.</em><br>
-  Las empresas usan IA para descartarte. <strong>Yo le di a los candidatos IA para <em>elegirlas</em>.</strong><br>
-  <em>Ahora es open source.</em>
+  <em>Una adaptacion orientada a Codex del sistema Career-Ops de Santiago.</em><br>
+  Conserva el flujo local-first original de busqueda de empleo, pero lo enruta limpiamente a traves de <strong>Codex</strong>, sus instrucciones de repo y su modelo operativo basado en prompts.<br>
+  <em>Fork de <a href="https://github.com/santifer/career-ops">santifer/career-ops</a>.</em>
 </p>
 
 <p align="center">
@@ -35,13 +35,24 @@
   <img src="docs/demo.gif" alt="Career-Ops Demo" width="800">
 </p>
 
-<p align="center"><strong>740+ ofertas evaluadas · 100+ CVs personalizados · 1 trabajo soñado conseguido</strong></p>
+<p align="center"><strong>Routing nativo para Codex · flujo local-first · fork compatible con upstream</strong></p>
 
 <p align="center"><a href="https://discord.gg/8pRpHETxa4"><img src="https://img.shields.io/badge/Unete_a_la_comunidad-Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord"></a></p>
 
 ## Que es esto
 
-Career-Ops convierte cualquier CLI de IA en un centro de mando de busqueda de empleo. En vez de trackear aplicaciones en un spreadsheet, tienes un pipeline AI que:
+Este repositorio es una **adaptacion para Codex** del proyecto original [Career-Ops](https://github.com/santifer/career-ops) de Santiago Fernández de Valderrama.
+
+La idea no es reinventar Career-Ops. La idea es hacer que funcione limpio con **Codex como agente local principal**:
+
+- el routing especifico de Codex vive en `AGENTS.md` y `CODEX.md`
+- se reutilizan los `modes/`, scripts, plantillas y flujo de tracker existentes
+- la personalizacion del usuario sigue en archivos de perfil/config, no en prompts compartidos del sistema
+- la repo sigue siendo un fork GitHub normal, para poder revisar y fusionar cambios de upstream de forma intencional
+
+Si quieres el proyecto original, usa `santifer/career-ops`. Si quieres la version afinada explicitamente para workflows con Codex, este fork es esa version.
+
+Career-Ops convierte un CLI de IA en un centro de mando de busqueda de empleo. En este fork, ese CLI es **Codex**. En vez de trackear aplicaciones en una hoja de calculo, tienes un pipeline local con IA que:
 
 - **Evalua ofertas** con scoring estructurado A-F (10 dimensiones ponderadas)
 - **Genera PDFs personalizados** -- CVs ATS-optimizados por oferta
@@ -49,11 +60,18 @@ Career-Ops convierte cualquier CLI de IA en un centro de mando de busqueda de em
 - **Procesa en batch** -- evalua 10+ ofertas en paralelo con sub-agentes
 - **Trackea todo** en una fuente de verdad unica con checks de integridad
 
-> **Importante: Esto NO es para spamear empresas.** Career-ops es un filtro -- te ayuda a encontrar las pocas ofertas que merecen tu tiempo entre cientos. El sistema recomienda encarecidamente no aplicar a nada por debajo de 4.0/5. Tu tiempo es valioso, y el del recruiter tambien. Siempre revisa antes de enviar.
+> **Importante: Esto NO es para spamear empresas.** Career-Ops es un filtro. Te ayuda a identificar las pocas ofertas que merecen tu tiempo entre cientos. El sistema recomienda encarecidamente no aplicar por debajo de 4.0/5. Siempre revisa antes de enviar.
 
 > **Aviso: las primeras evaluaciones no seran buenas.** El sistema no te conoce todavia. Dale contexto -- tu CV, tu historia profesional, tus proof points, tus preferencias, en que eres bueno, que quieres evitar. Cuanto mas lo nutras, mejor filtra. Piensa en ello como hacer onboarding a un recruiter nuevo: la primera semana necesita conocerte, luego se vuelve invaluable.
 
-Construido por alguien que lo uso para evaluar 740+ ofertas, generar 100+ CVs personalizados, y conseguir un rol de Head of Applied AI. [Lee el case study completo](https://santifer.io/career-ops).
+El sistema original fue construido y probado por Santiago, que lo uso para evaluar 740+ ofertas, generar 100+ CVs personalizados y conseguir un puesto de Head of Applied AI. [Lee el case study original](https://santifer.io/career-ops-system).
+
+## Por que existe este fork
+
+- El repo upstream ya soporta Codex, pero este fork hace que ese camino sea el predeterminado.
+- Centraliza las reglas de routing de Codex en `CODEX.md` y `AGENTS.md`.
+- Mantiene la repo estructurada para un flujo con Codex basado en prompts, sin mezclar varias convenciones de agentes.
+- Te da un sitio limpio donde personalizar y evolucionar el sistema sin tocar directamente el proyecto original.
 
 ## Features
 
@@ -74,7 +92,7 @@ Construido por alguien que lo uso para evaluar 740+ ofertas, generar 100+ CVs pe
 
 ```bash
 # 1. Clonar e instalar
-git clone https://github.com/santifer/career-ops.git
+git clone https://github.com/<tu-usuario>/career-ops.git
 cd career-ops && npm install
 npx playwright install chromium   # Necesario para generar PDFs
 

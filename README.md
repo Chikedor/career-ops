@@ -3,7 +3,7 @@
 [English](README.md) | [Español](README.es.md)
 
 <p align="center">
-  <a href="https://github.com/Chikedor/career-ops"><img src="docs/hero-banner.jpg" alt="Career-Ops for Codex — Local-First AI Job Search System" width="800"></a>
+  <a href="https://github.com/santifer/career-ops"><img src="docs/hero-banner.jpg" alt="Career-Ops for Codex — Local-First AI Job Search System" width="800"></a>
 </p>
 
 <p align="center">
@@ -94,7 +94,7 @@ The original system was built and battle-tested by Santiago, who used it to eval
 
 ```bash
 # 1. Clone and install
-git clone https://github.com/santifer/career-ops.git
+git clone https://github.com/<your-user>/career-ops.git
 cd career-ops && npm install
 npx playwright install chromium   # Required for PDF generation
 
