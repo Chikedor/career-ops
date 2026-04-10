@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# career-ops batch runner — standalone orchestrator for claude -p workers
-# Reads batch-input.tsv, delegates each offer to a claude -p worker,
+# career-ops batch runner — standalone orchestrator for Codex-compatible workers
+# Reads batch-input.tsv, delegates each offer to a headless worker command,
 # tracks state in batch-state.tsv for resumability.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -20,6 +20,7 @@ STATE_LOCK_DIR="$BATCH_DIR/.batch-state.lock"
 STATE_LOCK_PID_FILE="$STATE_LOCK_DIR/pid"
 STATE_LOCK_TIMEOUT_SECONDS=30
 MAIN_PID="${BASHPID:-$$}"
+BATCH_WORKER_CMD="${CAREER_OPS_BATCH_WORKER:-}"
 
 # Defaults
 PARALLEL=1
@@ -30,8 +31,9 @@ MAX_RETRIES=2
 
 usage() {
   cat <<'USAGE'
-career-ops batch runner — process job offers in batch via claude -p workers
-Uses your default Claude model (Claude Max subscription).
+career-ops batch runner — process job offers in batch via a configurable worker command
+Recommended Codex command: `codex exec`.
+Override with `CAREER_OPS_BATCH_WORKER` or pass `--worker-cmd`.
 
 Usage: batch-runner.sh [OPTIONS]
 
@@ -41,6 +43,7 @@ Options:
   --retry-failed       Only retry offers marked as "failed" in state
   --start-from N       Start from offer ID N (skip earlier IDs)
   --max-retries N      Max retry attempts per offer (default: 2)
+  --worker-cmd CMD     Headless worker command (required unless env is set)
   -h, --help           Show this help
 
 Files:
@@ -62,6 +65,9 @@ Examples:
 
   # Process 2 at a time starting from ID 10
   ./batch-runner.sh --parallel 2 --start-from 10
+
+  # Use an explicit worker command
+  ./batch-runner.sh --worker-cmd "codex exec"
 USAGE
 }
 
@@ -73,6 +79,7 @@ while [[ $# -gt 0 ]]; do
     --retry-failed) RETRY_FAILED=true; shift ;;
     --start-from) START_FROM="$2"; shift 2 ;;
     --max-retries) MAX_RETRIES="$2"; shift 2 ;;
+    --worker-cmd) BATCH_WORKER_CMD="$2"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown option: $1"; usage; exit 1 ;;
   esac
@@ -88,7 +95,7 @@ acquire_lock() {
       echo "If this is stale, remove $LOCK_FILE"
       exit 1
     else
-      echo "WARN: Stale lock file found (PID $old_pid not running). Removing."
+      echo "WARN: Stale lock file found (PID $old_pid not running). Removing." >&2
       rm -f "$LOCK_FILE"
     fi
   fi
@@ -116,9 +123,18 @@ check_prerequisites() {
     exit 1
   fi
 
-  if ! command -v claude &>/dev/null; then
-    echo "ERROR: 'claude' CLI not found in PATH."
-    exit 1
+  if [[ "$DRY_RUN" == "false" ]]; then
+    local worker_bin
+    worker_bin=$(printf '%s\n' "$BATCH_WORKER_CMD" | awk '{print $1}')
+    if [[ -z "$worker_bin" ]]; then
+      echo "ERROR: No headless worker command configured."
+      echo "Set CAREER_OPS_BATCH_WORKER or pass --worker-cmd."
+      exit 1
+    fi
+    if ! command -v "$worker_bin" &>/dev/null; then
+      echo "ERROR: Worker CLI '$worker_bin' not found in PATH."
+      exit 1
+    fi
   fi
 
   mkdir -p "$LOGS_DIR" "$TRACKER_DIR" "$REPORTS_DIR"
@@ -157,7 +173,7 @@ acquire_state_lock() {
       if [[ -n "$lock_pid" ]] && ! kill -0 "$lock_pid" 2>/dev/null; then
         rm -f "$STATE_LOCK_PID_FILE"
         if rmdir "$STATE_LOCK_DIR" 2>/dev/null; then
-          echo "WARN: Recovered stale state lock (PID $lock_pid not running)."
+          echo "WARN: Recovered stale state lock (PID $lock_pid not running)." >&2
           continue
         fi
       fi
@@ -255,7 +271,7 @@ update_state_unlocked() {
     init_state
   fi
 
-  local tmp="$STATE_FILE.tmp"
+  local tmp="$STATE_FILE.tmp.$$"
   local found=false
 
   # Write header
@@ -301,6 +317,25 @@ reserve_report_num() {
   run_with_state_lock reserve_report_num_unlocked "$@"
 }
 
+run_worker_command() {
+  local resolved_prompt="$1"
+  local prompt="$2"
+  local log_file="$3"
+  local combined_prompt="$BATCH_DIR/.worker-input-$$-$(basename "$resolved_prompt" .md).md"
+
+  {
+    cat "$resolved_prompt"
+    printf '\n\n---\n\n'
+    printf '%s\n' "$prompt"
+  } > "$combined_prompt"
+
+  node "$BATCH_DIR/run-worker.mjs" "$combined_prompt" "$BATCH_WORKER_CMD" > "$log_file" 2>&1
+  local exit_code=$?
+
+  rm -f "$combined_prompt"
+  return "$exit_code"
+}
+
 # Process a single offer
 process_offer() {
   local id="$1" url="$2" source="$3" notes="$4"
@@ -338,13 +373,9 @@ process_offer() {
     -e "s|{{ID}}|${id}|g" \
     "$PROMPT_FILE" > "$resolved_prompt"
 
-  # Launch claude -p worker (uses default model from Claude Max subscription)
+  # Launch worker command against the resolved prompt.
   local exit_code=0
-  claude -p \
-    --dangerously-skip-permissions \
-    --append-system-prompt-file "$resolved_prompt" \
-    "$prompt" \
-    > "$log_file" 2>&1 || exit_code=$?
+  run_worker_command "$resolved_prompt" "$prompt" "$log_file" || exit_code=$?
 
   # Cleanup resolved prompt
   rm -f "$resolved_prompt"
@@ -401,7 +432,7 @@ print_summary() {
     case "$sstatus" in
       completed) completed=$((completed + 1))
         if [[ "$sscore" != "-" && -n "$sscore" ]]; then
-          score_sum=$(echo "$score_sum + $sscore" | bc 2>/dev/null || echo "$score_sum")
+          score_sum=$(awk -v a="$score_sum" -v b="$sscore" 'BEGIN { printf "%.6f", a + b }')
           score_count=$((score_count + 1))
         fi
         ;;
@@ -414,7 +445,7 @@ print_summary() {
 
   if (( score_count > 0 )); then
     local avg
-    avg=$(echo "scale=1; $score_sum / $score_count" | bc 2>/dev/null || echo "N/A")
+    avg=$(awk -v sum="$score_sum" -v count="$score_count" 'BEGIN { if (count == 0) print "N/A"; else printf "%.1f", sum / count }')
     echo "Average score: $avg/5 ($score_count scored)"
   fi
 }
@@ -441,6 +472,11 @@ main() {
 
   echo "=== career-ops batch runner ==="
   echo "Parallel: $PARALLEL | Max retries: $MAX_RETRIES"
+  if [[ -n "$BATCH_WORKER_CMD" ]]; then
+    echo "Worker: $BATCH_WORKER_CMD"
+  else
+    echo "Worker: <not configured>"
+  fi
   echo "Input: $total_input offers"
   echo ""
 
@@ -450,7 +486,7 @@ main() {
   local -a pending_sources=()
   local -a pending_notes=()
 
-  while IFS=$'\t' read -r id url source notes; do
+  while IFS=$'\t' read -r id url source notes || [[ -n "${id:-}" ]]; do
     [[ "$id" == "id" ]] && continue  # skip header
     [[ -z "$id" || -z "$url" ]] && continue
 

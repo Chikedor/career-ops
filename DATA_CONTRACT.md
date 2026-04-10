@@ -42,8 +42,9 @@ These files contain system logic, scripts, templates, and instructions that impr
 | `modes/tracker.md` | Tracker instructions |
 | `modes/training.md` | Training evaluation instructions |
 | `modes/de/*` | German language modes |
-| `CLAUDE.md` | Agent instructions |
-| `AGENTS.md` | Codex instructions |
+| `CODEX.md` | Codex-facing agent instructions |
+| `CLAUDE.md` | Legacy Claude-facing instructions |
+| `AGENTS.md` | Codex auto-load entrypoint |
 | `*.mjs` | Utility scripts |
 | `batch/batch-prompt.md` | Batch worker prompt |
 | `batch/batch-runner.sh` | Batch orchestrator |

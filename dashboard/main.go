@@ -57,7 +57,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		apps := data.ParseApplications(m.careerOpsPath)
-		metrics := data.ComputeMetrics(apps)
+		metrics := data.ComputeMetrics(m.careerOpsPath, apps)
 		old := m.pipeline
 		m.pipeline = screens.NewPipelineModel(
 			theme.NewTheme("catppuccin-mocha"),
@@ -121,17 +121,17 @@ func main() {
 	pathFlag := flag.String("path", ".", "Path to career-ops directory")
 	flag.Parse()
 
-	careerOpsPath := *pathFlag
+	careerOpsPath := data.ResolveCareerOpsPath(*pathFlag)
 
 	// Load applications
 	apps := data.ParseApplications(careerOpsPath)
 	if apps == nil {
-		fmt.Fprintf(os.Stderr, "Error: could not find applications.md in %s or %s/data/\n", careerOpsPath, careerOpsPath)
+		fmt.Fprintf(os.Stderr, "Error: could not find data/applications.md or applications.md under %s\n", careerOpsPath)
 		os.Exit(1)
 	}
 
 	// Compute metrics
-	metrics := data.ComputeMetrics(apps)
+	metrics := data.ComputeMetrics(careerOpsPath, apps)
 
 	// Batch-load all report summaries
 	t := theme.NewTheme("catppuccin-mocha")

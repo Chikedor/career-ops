@@ -13,9 +13,9 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Claude_Code-000?style=flat&logo=anthropic&logoColor=white" alt="Claude Code">
+  <img src="https://img.shields.io/badge/Codex-111827?style=flat&logo=openai&logoColor=white" alt="Codex">
   <img src="https://img.shields.io/badge/OpenCode-111827?style=flat&logo=terminal&logoColor=white" alt="OpenCode">
-  <img src="https://img.shields.io/badge/Codex_(pronto)-6B7280?style=flat&logo=openai&logoColor=white" alt="Codex">
+  <img src="https://img.shields.io/badge/Local--First-0F766E?style=flat&logo=files&logoColor=white" alt="Local First">
   <img src="https://img.shields.io/badge/Node.js-339933?style=flat&logo=node.js&logoColor=white" alt="Node.js">
   <img src="https://img.shields.io/badge/Go-00ADD8?style=flat&logo=go&logoColor=white" alt="Go">
   <img src="https://img.shields.io/badge/Playwright-2EAD33?style=flat&logo=playwright&logoColor=white" alt="Playwright">
@@ -65,7 +65,7 @@ Construido por alguien que lo uso para evaluar 740+ ofertas, generar 100+ CVs pe
 | **Scripts de negociacion** | Frameworks de negociacion salarial, pushback de descuentos geograficos, leverage de ofertas competidoras |
 | **PDFs ATS** | CVs con keywords inyectados, diseño Space Grotesk + DM Sans |
 | **Scanner de portales** | 45+ empresas pre-configuradas (Anthropic, OpenAI, ElevenLabs, Retool, n8n...) + queries en Ashby, Greenhouse, Lever, Wellfound |
-| **Batch** | Evaluacion en paralelo con workers `claude -p` |
+| **Batch** | Evaluacion en paralelo con `codex exec` u otro comando headless configurable |
 | **Dashboard TUI** | Terminal UI para navegar, filtrar y ordenar tu pipeline |
 | **Human-in-the-Loop** | La IA evalua y recomienda, tu decides y actuas. El sistema nunca envia una aplicacion -- tu siempre tienes la ultima palabra |
 | **Integridad de pipeline** | Merge automatico, dedup, normalizacion de estados, health checks |
@@ -88,41 +88,35 @@ cp templates/portals.example.yml portals.yml       # Personalizar empresas
 # 4. Añadir tu CV
 # Crear cv.md en la raiz del proyecto con tu CV en markdown
 
-# 5. Personalizar con Claude
-claude   # Abrir Claude Code en este directorio
+# 5. Personalizar con Codex
+# Abrir Codex en este directorio
 
-# Pidele a Claude que adapte el sistema a ti:
+# Pidele a Codex que adapte el sistema a ti:
 # "Cambia los arquetipos a roles de backend"
 # "Traduce los modes a ingles"
 # "Añade estas empresas a portals.yml"
 # "Actualiza mi perfil con este CV que te pego"
 
 # 6. Usar
-# Pega una URL de oferta o ejecuta /career-ops
+# Pega una URL de oferta o usa los prompts documentados abajo
 ```
 
-> **El sistema esta diseñado para que Claude lo personalice.** Modes, arquetipos, scoring, scripts de negociacion -- solo pidelo. Claude lee los mismos archivos que usa, asi que sabe exactamente que editar.
+> **El sistema esta diseñado para que lo personalice tu agente local.** Con Codex, mantén el flujo dentro de esta repo: modes, arquetipos, scoring y scripts de negociación viven en archivos editables.
 
 Guia completa en [docs/SETUP.md](docs/SETUP.md).
 
 ## Uso
 
-Career-ops es un unico slash command con multiples modos:
+Career-ops mantiene los mismos modes, pero con Codex el flujo práctico es por prompts en vez de slash commands:
 
-```
-/career-ops                → Mostrar todos los comandos
-/career-ops {pega un JD}   → Pipeline completo (evaluar + PDF + tracker)
-/career-ops scan           → Escanear portales
-/career-ops pdf            → Generar CV ATS-optimizado
-/career-ops batch          → Evaluar ofertas en batch
-/career-ops tracker        → Ver estado de aplicaciones
-/career-ops apply          → Rellenar formularios con IA
-/career-ops pipeline       → Procesar URLs pendientes
-/career-ops contacto       → Mensaje LinkedIn outreach
-/career-ops deep           → Research profundo de empresa
+```text
+Evalúa esta URL con el pipeline completo de career-ops.
+Lee data/pipeline.md y procesa las ofertas pendientes.
+Genera el PDF ATS para este JD usando modes/pdf.md.
+Revisa data/applications.md y resume mi pipeline activo.
 ```
 
-O simplemente pega una URL o descripcion de oferta -- career-ops la detecta y ejecuta el pipeline completo.
+Para batch usa `./batch/batch-runner.sh` con `codex exec` u otro comando headless explícito. Para navegación visual usa el dashboard Go.
 
 ## Como funciona
 
@@ -166,9 +160,8 @@ El scanner viene con **45+ empresas** pre-configuradas y **19 queries** en los p
 El dashboard integrado en terminal te permite navegar tu pipeline visualmente:
 
 ```bash
-cd dashboard
-go build -o career-dashboard .
-./career-dashboard --path ..
+go build -o dashboard/career-dashboard ./dashboard
+./dashboard/career-dashboard --path .
 ```
 
 Features: 6 pestañas de filtro, 4 modos de ordenacion, vista agrupada/plana, previews lazy-loaded, cambios de estado inline.
@@ -177,7 +170,8 @@ Features: 6 pestañas de filtro, 4 modos de ordenacion, vista agrupada/plana, pr
 
 ```
 career-ops/
-├── CLAUDE.md                    # Instrucciones del agente
+├── CODEX.md                     # Instrucciones para Codex
+├── CLAUDE.md                    # Instrucciones legacy para Claude
 ├── cv.md                        # Tu CV (crealo tu)
 ├── article-digest.md            # Tus proof points (opcional)
 ├── config/
@@ -207,13 +201,13 @@ career-ops/
 
 ## Tech Stack
 
-![Claude Code](https://img.shields.io/badge/Claude_Code-000?style=flat&logo=anthropic&logoColor=white)
+![Codex](https://img.shields.io/badge/Codex-111827?style=flat&logo=openai&logoColor=white)
 ![Node.js](https://img.shields.io/badge/Node.js-339933?style=flat&logo=node.js&logoColor=white)
 ![Playwright](https://img.shields.io/badge/Playwright-2EAD33?style=flat&logo=playwright&logoColor=white)
 ![Go](https://img.shields.io/badge/Go-00ADD8?style=flat&logo=go&logoColor=white)
 ![Bubble Tea](https://img.shields.io/badge/Bubble_Tea-FF75B5?style=flat&logo=go&logoColor=white)
 
-- **Agente**: Claude Code con skills y modos personalizados
+- **Agente**: Codex con instrucciones nativas de la repo y modes reutilizados
 - **PDF**: Playwright/Puppeteer + template HTML
 - **Scanner**: Playwright + Greenhouse API + WebSearch
 - **Dashboard**: Go + Bubble Tea + Lipgloss (tema Catppuccin Mocha)

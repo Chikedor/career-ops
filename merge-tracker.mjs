@@ -17,49 +17,30 @@
 import { readFileSync, writeFileSync, readdirSync, mkdirSync, renameSync, existsSync } from 'fs';
 import { join, basename, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { getStatusConfig, normalizeStatusId, normalizeStatusLabel, stripStatusDecorations } from './lib/status-config.mjs';
+import { getTrackerFilePaths } from './lib/tracker-file.mjs';
 
 const CAREER_OPS = dirname(fileURLToPath(import.meta.url));
-// Support both layouts: data/applications.md (boilerplate) and applications.md (original)
-const APPS_FILE = existsSync(join(CAREER_OPS, 'data/applications.md'))
-  ? join(CAREER_OPS, 'data/applications.md')
-  : join(CAREER_OPS, 'applications.md');
+const { primary: APPS_FILE, readPath: APPS_READ_FILE } = getTrackerFilePaths(CAREER_OPS);
 const ADDITIONS_DIR = join(CAREER_OPS, 'batch/tracker-additions');
 const MERGED_DIR = join(ADDITIONS_DIR, 'merged');
 const DRY_RUN = process.argv.includes('--dry-run');
 const VERIFY = process.argv.includes('--verify');
 
-// Canonical states and aliases
-const CANONICAL_STATES = ['Evaluated', 'Applied', 'Responded', 'Interview', 'Offer', 'Rejected', 'Discarded', 'SKIP'];
+const { states } = getStatusConfig();
+const CANONICAL_STATES = new Set(states.map((state) => state.label.toLowerCase()));
 
 function validateStatus(status) {
-  const clean = status.replace(/\*\*/g, '').replace(/\s+\d{4}-\d{2}-\d{2}.*$/, '').trim();
-  const lower = clean.toLowerCase();
+  const clean = stripStatusDecorations(status);
+  const normalizedId = normalizeStatusId(clean, '');
+  const canonical = normalizeStatusLabel(clean);
 
-  for (const valid of CANONICAL_STATES) {
-    if (valid.toLowerCase() === lower) return valid;
+  if (normalizedId && CANONICAL_STATES.has(canonical.toLowerCase())) {
+    return canonical;
   }
 
-  // Aliases
-  const aliases = {
-    // Spanish → English
-    'evaluada': 'Evaluated', 'condicional': 'Evaluated', 'hold': 'Evaluated', 'evaluar': 'Evaluated', 'verificar': 'Evaluated',
-    'aplicado': 'Applied', 'enviada': 'Applied', 'aplicada': 'Applied', 'applied': 'Applied', 'sent': 'Applied',
-    'respondido': 'Responded',
-    'entrevista': 'Interview',
-    'oferta': 'Offer',
-    'rechazado': 'Rejected', 'rechazada': 'Rejected',
-    'descartado': 'Discarded', 'descartada': 'Discarded', 'cerrada': 'Discarded', 'cancelada': 'Discarded',
-    'no aplicar': 'SKIP', 'no_aplicar': 'SKIP', 'skip': 'SKIP', 'monitor': 'SKIP',
-    'geo blocker': 'SKIP',
-  };
-
-  if (aliases[lower]) return aliases[lower];
-
-  // DUPLICADO/Repost → Discarded
-  if (/^(duplicado|dup|repost)/i.test(lower)) return 'Discarded';
-
-  console.warn(`⚠️  Non-canonical status "${status}" → defaulting to "Evaluated"`);
-  return 'Evaluated';
+  console.warn(`⚠️  Non-canonical status "${status}" → defaulting to "${normalizeStatusLabel('evaluated')}"`);
+  return normalizeStatusLabel('evaluated');
 }
 
 function normalizeCompany(name) {
@@ -93,6 +74,23 @@ function parseAppLine(line) {
     score: parts[5], status: parts[6], pdf: parts[7], report: parts[8],
     notes: parts[9] || '', raw: line,
   };
+}
+
+function ensureApplicationsFile() {
+  if (existsSync(APPS_FILE)) {
+    return;
+  }
+
+  const initialContent = [
+    '# Career Pipeline',
+    '',
+    '| # | Date | Company | Role | Score | Status | PDF | Report | Notes |',
+    '|---|---|---|---|---|---|---|---|---|',
+    '',
+  ].join('\n');
+
+  mkdirSync(dirname(APPS_FILE), { recursive: true });
+  writeFileSync(APPS_FILE, initialContent);
 }
 
 /**
@@ -181,11 +179,9 @@ function parseTsvContent(content, filename) {
 // ---- Main ----
 
 // Read applications.md
-if (!existsSync(APPS_FILE)) {
-  console.log('No applications.md found. Nothing to merge into.');
-  process.exit(0);
-}
-const appContent = readFileSync(APPS_FILE, 'utf-8');
+ensureApplicationsFile();
+const sourceAppsFile = existsSync(APPS_READ_FILE) ? APPS_READ_FILE : APPS_FILE;
+const appContent = readFileSync(sourceAppsFile, 'utf-8');
 const appLines = appContent.split('\n');
 const existingApps = [];
 let maxNum = 0;

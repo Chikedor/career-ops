@@ -14,18 +14,18 @@
 import { readFileSync, writeFileSync, copyFileSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { getStatusConfig, normalizeStatusId, normalizeStatusLabel, stripStatusDecorations } from './lib/status-config.mjs';
+import { getTrackerFilePaths } from './lib/tracker-file.mjs';
 
 const CAREER_OPS = dirname(fileURLToPath(import.meta.url));
-// Support both layouts: data/applications.md (boilerplate) and applications.md (original)
-const APPS_FILE = existsSync(join(CAREER_OPS, 'data/applications.md'))
-  ? join(CAREER_OPS, 'data/applications.md')
-  : join(CAREER_OPS, 'applications.md');
+const { readPath: APPS_FILE } = getTrackerFilePaths(CAREER_OPS);
 const DRY_RUN = process.argv.includes('--dry-run');
 
-// Canonical status mapping
+const { byId } = getStatusConfig();
+
 function normalizeStatus(raw) {
   // Strip markdown bold
-  let s = raw.replace(/\*\*/g, '').trim();
+  const s = stripStatusDecorations(raw);
   const lower = s.toLowerCase();
 
   // DUPLICADO variants → Discarded
@@ -61,23 +61,10 @@ function normalizeStatus(raw) {
   // "—" (em dash, no status) → Discarded
   if (s === '—' || s === '-' || s === '') return { status: 'Discarded' };
 
-  // Already canonical (English, per states.yml) — just fix casing/bold
-  const canonical = [
-    'Evaluated', 'Applied', 'Responded', 'Interview',
-    'Offer', 'Rejected', 'Discarded', 'SKIP',
-  ];
-  for (const c of canonical) {
-    if (lower === c.toLowerCase()) return { status: c };
+  const normalizedId = normalizeStatusId(s, '');
+  if (normalizedId && byId.has(normalizedId)) {
+    return { status: normalizeStatusLabel(s) };
   }
-
-  // Spanish aliases → English canonicals
-  if (['evaluada'].includes(lower)) return { status: 'Evaluated' };
-  if (['aplicado', 'enviada', 'aplicada', 'applied', 'sent'].includes(lower)) return { status: 'Applied' };
-  if (['respondido'].includes(lower)) return { status: 'Responded' };
-  if (['entrevista'].includes(lower)) return { status: 'Interview' };
-  if (['oferta'].includes(lower)) return { status: 'Offer' };
-  if (['cerrada', 'descartada'].includes(lower)) return { status: 'Discarded' };
-  if (['no aplicar', 'no_aplicar', 'skip'].includes(lower)) return { status: 'SKIP' };
 
   // Unknown — flag it
   return { status: null, unknown: true };

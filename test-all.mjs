@@ -99,7 +99,7 @@ console.log('\n4. Data contract validation');
 
 // Check system files exist
 const systemFiles = [
-  'CLAUDE.md', 'VERSION', 'DATA_CONTRACT.md',
+  'CODEX.md', 'CLAUDE.md', 'VERSION', 'DATA_CONTRACT.md',
   'modes/_shared.md', 'modes/_profile.template.md',
   'modes/oferta.md', 'modes/pdf.md', 'modes/scan.md',
   'templates/states.yml', 'templates/cv-template.html',
@@ -203,9 +203,19 @@ if (shared.includes('_profile.md')) {
   fail('_shared.md does NOT reference _profile.md');
 }
 
-// ── 8. CLAUDE.md INTEGRITY ──────────────────────────────────────
+// ── 8. AGENT DOCS INTEGRITY ────────────────────────────────────
 
-console.log('\n8. CLAUDE.md integrity');
+console.log('\n8. Agent docs integrity');
+
+const codexDoc = readFile('CODEX.md');
+const codexSections = ['Routing', 'Rules', 'Batch', 'Validation'];
+for (const section of codexSections) {
+  if (codexDoc.includes(section)) {
+    pass(`CODEX.md has section: ${section}`);
+  } else {
+    fail(`CODEX.md missing section: ${section}`);
+  }
+}
 
 const claude = readFile('CLAUDE.md');
 const requiredSections = [

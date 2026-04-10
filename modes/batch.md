@@ -5,21 +5,21 @@ Dos modos de uso: **conductor --chrome** (navega portales en tiempo real) o **st
 ## Arquitectura
 
 ```
-Claude Conductor (claude --chrome --dangerously-skip-permissions)
+Codex Conductor (interactive browser-capable session)
   │
   │  Chrome: navega portales (sesiones logueadas)
   │  Lee DOM directo — el usuario ve todo en tiempo real
   │
   ├─ Oferta 1: lee JD del DOM + URL
-  │    └─► claude -p worker → report .md + PDF + tracker-line
+  │    └─► headless worker → report .md + PDF + tracker-line
   │
   ├─ Oferta 2: click siguiente, lee JD + URL
-  │    └─► claude -p worker → report .md + PDF + tracker-line
+  │    └─► headless worker → report .md + PDF + tracker-line
   │
   └─ Fin: merge tracker-additions → applications.md + resumen
 ```
 
-Cada worker es un `claude -p` hijo con contexto limpio de 200K tokens. El conductor solo orquesta.
+Cada worker es un comando headless independiente. Define el comando exacto con `CAREER_OPS_BATCH_WORKER` o `--worker-cmd`.
 
 ## Archivos
 
@@ -42,11 +42,9 @@ batch/
    a. Chrome: click en la oferta → leer JD text del DOM
    b. Guardar JD a `/tmp/batch-jd-{id}.txt`
    c. Calcular siguiente REPORT_NUM secuencial
-   d. Ejecutar via Bash:
+   d. Ejecutar via Bash con el worker configurado:
       ```bash
-      claude -p --dangerously-skip-permissions \
-        --append-system-prompt-file batch/batch-prompt.md \
-        "Procesa esta oferta. URL: {url}. JD: /tmp/batch-jd-{id}.txt. Report: {num}. ID: {id}"
+      CAREER_OPS_BATCH_WORKER="tu-comando-headless-de-codex" ./batch/batch-runner.sh --parallel 1 --start-from {id}
       ```
    e. Actualizar `batch-state.tsv` (completed/failed + score + report_num)
    f. Log a `logs/{report_num}-{id}.log`
@@ -66,6 +64,7 @@ Opciones:
 - `--start-from N` — empieza desde ID N
 - `--parallel N` — N workers en paralelo
 - `--max-retries N` — intentos por oferta (default: 2)
+- `--worker-cmd CMD` — override del comando headless
 
 ## Formato batch-state.tsv
 
@@ -82,9 +81,9 @@ id	url	status	started_at	completed_at	report_num	score	error	retries
 - Lock file (`batch-runner.pid`) previene ejecución doble
 - Cada worker es independiente: fallo en oferta #47 no afecta a las demás
 
-## Workers (claude -p)
+## Workers
 
-Cada worker recibe `batch-prompt.md` como system prompt. Es self-contained.
+Cada worker recibe el prompt resuelto desde `batch-prompt.md`. Es self-contained.
 
 El worker produce:
 1. Report `.md` en `reports/`

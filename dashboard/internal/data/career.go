@@ -25,17 +25,15 @@ var (
 )
 
 // ParseApplications reads applications.md and returns parsed applications.
-// It tries both {path}/applications.md and {path}/data/applications.md for compatibility.
+// It prefers {path}/data/applications.md and falls back to {path}/applications.md for legacy compatibility.
 func ParseApplications(careerOpsPath string) []model.CareerApplication {
-	filePath := filepath.Join(careerOpsPath, "applications.md")
+	filePath := resolveExistingPath(careerOpsPath, "data/applications.md", "applications.md")
+	if filePath == "" {
+		return nil
+	}
 	content, err := os.ReadFile(filePath)
 	if err != nil {
-		// Fallback: try data/ subdirectory
-		filePath = filepath.Join(careerOpsPath, "data", "applications.md")
-		content, err = os.ReadFile(filePath)
-		if err != nil {
-			return nil
-		}
+		return nil
 	}
 
 	lines := strings.Split(string(content), "\n")
@@ -74,7 +72,10 @@ func ParseApplications(careerOpsPath string) []model.CareerApplication {
 			continue
 		}
 
-		num++
+		num, _ = strconv.Atoi(fields[0])
+		if num == 0 {
+			continue
+		}
 		app := model.CareerApplication{
 			Number:  num,
 			Date:    fields[1],
@@ -162,7 +163,10 @@ func ParseApplications(careerOpsPath string) []model.CareerApplication {
 
 // loadBatchInputURLs reads batch-input.tsv and returns a map of batch ID -> job URL.
 func loadBatchInputURLs(careerOpsPath string) map[string]string {
-	inputPath := filepath.Join(careerOpsPath, "batch", "batch-input.tsv")
+	inputPath := resolveExistingPath(careerOpsPath, "batch/batch-input.tsv")
+	if inputPath == "" {
+		return nil
+	}
 	inputData, err := os.ReadFile(inputPath)
 	if err != nil {
 		return nil
@@ -204,7 +208,10 @@ type batchEntry struct {
 // matching as fallback for failed/missing jobs.
 func loadJobURLs(careerOpsPath string) map[string]string {
 	// Read batch-input.tsv: id \t url \t source \t notes
-	inputPath := filepath.Join(careerOpsPath, "batch", "batch-input.tsv")
+	inputPath := resolveExistingPath(careerOpsPath, "batch/batch-input.tsv")
+	if inputPath == "" {
+		return nil
+	}
 	inputData, err := os.ReadFile(inputPath)
 	if err != nil {
 		return nil
@@ -248,7 +255,10 @@ func loadJobURLs(careerOpsPath string) map[string]string {
 	}
 
 	// Read batch-state.tsv: id \t url \t status \t ... \t report_num \t ...
-	statePath := filepath.Join(careerOpsPath, "batch", "batch-state.tsv")
+	statePath := resolveExistingPath(careerOpsPath, "batch/batch-state.tsv")
+	if statePath == "" {
+		return nil
+	}
 	stateData, err := os.ReadFile(statePath)
 	if err != nil {
 		return nil
@@ -280,7 +290,10 @@ func loadJobURLs(careerOpsPath string) map[string]string {
 
 // enrichFromScanHistory fills JobURL from scan-history.tsv by matching company name.
 func enrichFromScanHistory(careerOpsPath string, apps []model.CareerApplication) {
-	scanPath := filepath.Join(careerOpsPath, "scan-history.tsv")
+	scanPath := resolveExistingPath(careerOpsPath, "scan-history.tsv", "data/scan-history.tsv")
+	if scanPath == "" {
+		return
+	}
 	scanData, err := os.ReadFile(scanPath)
 	if err != nil {
 		return
@@ -351,7 +364,10 @@ func normalizeCompany(name string) string {
 // enrichAppURLsByCompany fills in JobURL for apps that didn't get one via report_num mapping.
 // It matches by company name from batch-input.tsv notes.
 func enrichAppURLsByCompany(careerOpsPath string, apps []model.CareerApplication) {
-	inputPath := filepath.Join(careerOpsPath, "batch", "batch-input.tsv")
+	inputPath := resolveExistingPath(careerOpsPath, "batch/batch-input.tsv")
+	if inputPath == "" {
+		return
+	}
 	inputData, err := os.ReadFile(inputPath)
 	if err != nil {
 		return
@@ -427,7 +443,8 @@ func enrichAppURLsByCompany(careerOpsPath string, apps []model.CareerApplication
 }
 
 // ComputeMetrics calculates aggregate metrics from applications.
-func ComputeMetrics(apps []model.CareerApplication) model.PipelineMetrics {
+func ComputeMetrics(careerOpsPath string, apps []model.CareerApplication) model.PipelineMetrics {
+	config := loadStatusConfig(careerOpsPath)
 	m := model.PipelineMetrics{
 		Total:    len(apps),
 		ByStatus: make(map[string]int),
@@ -437,7 +454,7 @@ func ComputeMetrics(apps []model.CareerApplication) model.PipelineMetrics {
 	var scored int
 
 	for _, app := range apps {
-		status := NormalizeStatus(app.Status)
+		status := NormalizeStatusWithConfig(config, app.Status)
 		m.ByStatus[status]++
 
 		if app.Score > 0 {
@@ -450,7 +467,7 @@ func ComputeMetrics(apps []model.CareerApplication) model.PipelineMetrics {
 		if app.HasPDF {
 			m.WithPDF++
 		}
-		if status != "skip" && status != "rejected" && status != "discarded" {
+		if state, ok := config.ByID[status]; ok && state.Actionable {
 			m.Actionable++
 		}
 	}
@@ -465,36 +482,11 @@ func ComputeMetrics(apps []model.CareerApplication) model.PipelineMetrics {
 // NormalizeStatus normalizes raw status text to a canonical form.
 // Aliases match states.yml -- keep in sync with career-ops/states.yml
 func NormalizeStatus(raw string) string {
-	// Strip markdown bold and trailing dates
-	s := strings.ReplaceAll(raw, "**", "")
-	s = strings.TrimSpace(strings.ToLower(s))
-	// Strip trailing date (e.g., "aplicado 2026-03-12")
-	if idx := strings.Index(s, " 202"); idx > 0 {
-		s = strings.TrimSpace(s[:idx])
-	}
+	return normalizeStatusWithConfig(loadStatusConfig("."), raw).ID
+}
 
-	switch {
-	// Most restrictive first — accepts both English and Spanish
-	case strings.Contains(s, "no aplicar") || strings.Contains(s, "no_aplicar") || s == "skip" || strings.Contains(s, "geo blocker"):
-		return "skip"
-	case strings.Contains(s, "interview") || strings.Contains(s, "entrevista"):
-		return "interview"
-	case s == "offer" || strings.Contains(s, "oferta"):
-		return "offer"
-	case strings.Contains(s, "responded") || strings.Contains(s, "respondido"):
-		return "responded"
-	case strings.Contains(s, "applied") || strings.Contains(s, "aplicado") || s == "enviada" || s == "aplicada" || s == "sent":
-		return "applied"
-	case strings.Contains(s, "rejected") || strings.Contains(s, "rechazado") || s == "rechazada":
-		return "rejected"
-	case strings.Contains(s, "discarded") || strings.Contains(s, "descartado") || s == "descartada" || s == "cerrada" || s == "cancelada" ||
-		strings.HasPrefix(s, "duplicado") || strings.HasPrefix(s, "dup"):
-		return "discarded"
-	case strings.Contains(s, "evaluated") || strings.Contains(s, "evaluada") || s == "condicional" || s == "hold" || s == "monitor" || s == "evaluar" || s == "verificar":
-		return "evaluated"
-	default:
-		return s
-	}
+func NormalizeStatusWithConfig(config StatusConfig, raw string) string {
+	return normalizeStatusWithConfig(config, raw).ID
 }
 
 // LoadReportSummary extracts key fields from a report file.
@@ -537,14 +529,13 @@ func LoadReportSummary(careerOpsPath, reportPath string) (archetype, tldr, remot
 
 // UpdateApplicationStatus updates the status of an application in applications.md.
 func UpdateApplicationStatus(careerOpsPath string, app model.CareerApplication, newStatus string) error {
-	filePath := filepath.Join(careerOpsPath, "applications.md")
+	filePath := resolveExistingPath(careerOpsPath, "data/applications.md", "applications.md")
+	if filePath == "" {
+		return fmt.Errorf("applications.md not found")
+	}
 	content, err := os.ReadFile(filePath)
 	if err != nil {
-		filePath = filepath.Join(careerOpsPath, "data", "applications.md")
-		content, err = os.ReadFile(filePath)
-		if err != nil {
-			return err
-		}
+		return err
 	}
 
 	lines := strings.Split(string(content), "\n")
@@ -572,8 +563,15 @@ func UpdateApplicationStatus(careerOpsPath string, app model.CareerApplication, 
 
 // replaceStatusInLine replaces the old status with new status in a table line.
 func replaceStatusInLine(line, oldStatus, newStatus string) string {
-	// Case-insensitive replacement of the status field
-	return strings.Replace(line, oldStatus, newStatus, 1)
+	if !strings.Contains(line, "|") {
+		return line
+	}
+	parts := strings.Split(line, "|")
+	if len(parts) < 9 {
+		return line
+	}
+	parts[6] = " " + newStatus + " "
+	return strings.Join(parts, "|")
 }
 
 // cleanTableCell removes trailing pipes and whitespace from a table cell value.
@@ -585,24 +583,10 @@ func cleanTableCell(s string) string {
 
 // StatusPriority returns the sort priority for a status (lower = higher priority).
 func StatusPriority(status string) int {
-	switch NormalizeStatus(status) {
-	case "interview":
-		return 0
-	case "offer":
-		return 1
-	case "responded":
-		return 2
-	case "applied":
-		return 3
-	case "evaluated":
-		return 4
-	case "skip":
-		return 5
-	case "rejected":
-		return 6
-	case "discarded":
-		return 7
-	default:
-		return 8
-	}
+	return StatusPriorityWithConfig(loadStatusConfig("."), status)
+}
+
+func StatusPriorityWithConfig(config StatusConfig, status string) int {
+	state := normalizeStatusWithConfig(config, status)
+	return state.Rank
 }

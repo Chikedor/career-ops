@@ -83,11 +83,6 @@ var pipelineTabs = []pipelineTab{
 
 var sortCycle = []string{sortScore, sortDate, sortCompany, sortStatus}
 
-var statusOptions = []string{"Evaluated", "Applied", "Responded", "Interview", "Offer", "Rejected", "Discarded", "SKIP"}
-
-// statusGroupOrder defines display order for grouped view.
-var statusGroupOrder = []string{"interview", "offer", "responded", "applied", "evaluated", "skip", "rejected", "discarded"}
-
 // PipelineModel implements the career pipeline dashboard screen.
 type PipelineModel struct {
 	apps          []model.CareerApplication
@@ -101,6 +96,7 @@ type PipelineModel struct {
 	width, height int
 	theme         theme.Theme
 	careerOpsPath string
+	statusConfig  data.StatusConfig
 	reportCache   map[string]reportSummary
 	// Status picker sub-state
 	statusPicker bool
@@ -119,6 +115,7 @@ func NewPipelineModel(t theme.Theme, apps []model.CareerApplication, metrics mod
 		height:        height,
 		theme:         t,
 		careerOpsPath: careerOpsPath,
+		statusConfig:  data.LoadStatusConfig(careerOpsPath),
 		reportCache:   make(map[string]reportSummary),
 	}
 	m.applyFilterAndSort()
@@ -284,6 +281,7 @@ func (m PipelineModel) handleKey(msg tea.KeyMsg) (PipelineModel, tea.Cmd) {
 }
 
 func (m PipelineModel) handleStatusPicker(msg tea.KeyMsg) (PipelineModel, tea.Cmd) {
+	options := m.statusOptions()
 	switch msg.String() {
 	case "esc", "q":
 		m.statusPicker = false
@@ -291,8 +289,8 @@ func (m PipelineModel) handleStatusPicker(msg tea.KeyMsg) (PipelineModel, tea.Cm
 
 	case "down":
 		m.statusCursor++
-		if m.statusCursor >= len(statusOptions) {
-			m.statusCursor = len(statusOptions) - 1
+		if m.statusCursor >= len(options) {
+			m.statusCursor = len(options) - 1
 		}
 
 	case "up":
@@ -304,7 +302,7 @@ func (m PipelineModel) handleStatusPicker(msg tea.KeyMsg) (PipelineModel, tea.Cm
 	case "enter":
 		m.statusPicker = false
 		if app, ok := m.CurrentApp(); ok {
-			newStatus := statusOptions[m.statusCursor]
+			newStatus := options[m.statusCursor]
 			return m, func() tea.Msg {
 				return PipelineUpdateStatusMsg{
 					CareerOpsPath: m.careerOpsPath,
@@ -338,12 +336,12 @@ func (m *PipelineModel) applyFilterAndSort() {
 
 	currentFilter := pipelineTabs[m.activeTab].filter
 	for _, app := range m.apps {
-		norm := data.NormalizeStatus(app.Status)
+		norm := data.NormalizeStatusWithConfig(m.statusConfig, app.Status)
 		switch currentFilter {
 		case filterAll:
 			filtered = append(filtered, app)
 		case filterTop:
-			if app.Score >= 4.0 && norm != "skip" {
+			if app.Score >= 4.0 && m.stateAllowsTopFilter(norm) {
 				filtered = append(filtered, app)
 			}
 		default:
@@ -369,15 +367,15 @@ func (m *PipelineModel) applyFilterAndSort() {
 		})
 	case sortStatus:
 		sort.SliceStable(filtered, func(i, j int) bool {
-			return data.StatusPriority(filtered[i].Status) < data.StatusPriority(filtered[j].Status)
+			return data.StatusPriorityWithConfig(m.statusConfig, filtered[i].Status) < data.StatusPriorityWithConfig(m.statusConfig, filtered[j].Status)
 		})
 	}
 
 	// In grouped mode, always sort by status priority first, then by selected sort within groups
 	if m.viewMode == "grouped" {
 		sort.SliceStable(filtered, func(i, j int) bool {
-			pi := data.StatusPriority(filtered[i].Status)
-			pj := data.StatusPriority(filtered[j].Status)
+			pi := data.StatusPriorityWithConfig(m.statusConfig, filtered[i].Status)
+			pj := data.StatusPriorityWithConfig(m.statusConfig, filtered[j].Status)
 			if pi != pj {
 				return pi < pj
 			}
@@ -426,7 +424,7 @@ func (m PipelineModel) cursorLineEstimate() int {
 	line := 0
 	prevStatus := ""
 	for i, app := range m.filtered {
-		norm := data.NormalizeStatus(app.Status)
+		norm := data.NormalizeStatusWithConfig(m.statusConfig, app.Status)
 		if norm != prevStatus {
 			line++ // group header
 			prevStatus = norm
@@ -540,12 +538,12 @@ func (m PipelineModel) renderTabs() string {
 func (m PipelineModel) countForFilter(filter string) int {
 	count := 0
 	for _, app := range m.apps {
-		norm := data.NormalizeStatus(app.Status)
+		norm := data.NormalizeStatusWithConfig(m.statusConfig, app.Status)
 		switch filter {
 		case filterAll:
 			count++
 		case filterTop:
-			if app.Score >= 4.0 && norm != "skip" {
+			if app.Score >= 4.0 && m.stateAllowsTopFilter(norm) {
 				count++
 			}
 		default:
@@ -566,14 +564,14 @@ func (m PipelineModel) renderMetrics() string {
 	var parts []string
 	statusColors := m.statusColorMap()
 
-	for _, status := range statusGroupOrder {
+	for _, status := range m.statusGroupOrder() {
 		count, ok := m.metrics.ByStatus[status]
 		if !ok || count == 0 {
 			continue
 		}
 		color := statusColors[status]
 		s := lipgloss.NewStyle().Foreground(color)
-		parts = append(parts, s.Render(fmt.Sprintf("%s:%d", statusLabel(status), count)))
+		parts = append(parts, s.Render(fmt.Sprintf("%s:%d", m.statusLabel(status), count)))
 	}
 
 	return style.Render(strings.Join(parts, "  "))
@@ -605,7 +603,7 @@ func (m PipelineModel) renderBody() string {
 	padStyle := lipgloss.NewStyle().Padding(0, 2)
 
 	for i, app := range m.filtered {
-		norm := data.NormalizeStatus(app.Status)
+		norm := data.NormalizeStatusWithConfig(m.statusConfig, app.Status)
 
 		// Group header in grouped mode
 		if m.viewMode == "grouped" && norm != prevStatus {
@@ -615,8 +613,8 @@ func (m PipelineModel) renderBody() string {
 				Foreground(m.theme.Subtext)
 			lines = append(lines, padStyle.Render(
 				headerStyle.Render(fmt.Sprintf("── %s (%d) %s",
-					strings.ToUpper(statusLabel(norm)), count,
-					strings.Repeat("─", max(0, m.width-30-len(statusLabel(norm)))))),
+					strings.ToUpper(m.statusLabel(norm)), count,
+					strings.Repeat("─", max(0, m.width-30-len(m.statusLabel(norm)))))),
 			))
 			prevStatus = norm
 		}
@@ -662,10 +660,10 @@ func (m PipelineModel) renderAppLine(app model.CareerApplication, selected bool)
 	roleStyle := lipgloss.NewStyle().Foreground(m.theme.Subtext).Width(roleW)
 
 	// Status with color -- fixed column
-	norm := data.NormalizeStatus(app.Status)
+	norm := data.NormalizeStatusWithConfig(m.statusConfig, app.Status)
 	statusColor := m.statusColorMap()[norm]
 	statusStyle := lipgloss.NewStyle().Foreground(statusColor).Width(statusW)
-	statusText := statusStyle.Render(statusLabel(norm))
+	statusText := statusStyle.Render(m.statusLabel(norm))
 
 	// Comp from report cache -- fixed column
 	compText := ""
@@ -792,7 +790,7 @@ func (m PipelineModel) overlayStatusPicker(body string) string {
 	var picker []string
 	picker = append(picker, padStyle.Render(borderStyle.Render("Change status:")))
 
-	for i, opt := range statusOptions {
+	for i, opt := range m.statusOptions() {
 		style := lipgloss.NewStyle().Foreground(m.theme.Text).Width(pickerWidth)
 		if i == m.statusCursor {
 			style = style.Background(m.theme.Overlay).Bold(true)
@@ -837,35 +835,54 @@ func (m PipelineModel) statusColorMap() map[string]lipgloss.Color {
 	}
 }
 
+func (m PipelineModel) statusOptions() []string {
+	options := make([]string, 0, len(m.statusConfig.States))
+	for _, state := range m.statusConfig.States {
+		options = append(options, state.Label)
+	}
+	if len(options) == 0 {
+		return []string{"Evaluated", "Applied", "Responded", "Interview", "Offer", "Rejected", "Discarded", "SKIP"}
+	}
+	return options
+}
+
+func (m PipelineModel) statusGroupOrder() []string {
+	order := make([]string, 0, len(m.statusConfig.States))
+	for _, state := range m.statusConfig.States {
+		order = append(order, state.ID)
+	}
+	if len(order) == 0 {
+		return []string{"interview", "offer", "responded", "applied", "evaluated", "skip", "rejected", "discarded"}
+	}
+	sort.SliceStable(order, func(i, j int) bool {
+		left := m.statusConfig.ByID[order[i]]
+		right := m.statusConfig.ByID[order[j]]
+		return left.Rank < right.Rank
+	})
+	return order
+}
+
+func (m PipelineModel) stateAllowsTopFilter(statusID string) bool {
+	state, ok := m.statusConfig.ByID[statusID]
+	if !ok {
+		return statusID != "skip" && statusID != "rejected" && statusID != "discarded"
+	}
+	return state.TopFilter
+}
+
 func (m PipelineModel) countByNormStatus(status string) int {
 	count := 0
 	for _, app := range m.filtered {
-		if data.NormalizeStatus(app.Status) == status {
+		if data.NormalizeStatusWithConfig(m.statusConfig, app.Status) == status {
 			count++
 		}
 	}
 	return count
 }
 
-func statusLabel(norm string) string {
-	switch norm {
-	case "interview":
-		return "Interview"
-	case "offer":
-		return "Offer"
-	case "responded":
-		return "Responded"
-	case "applied":
-		return "Applied"
-	case "evaluated":
-		return "Evaluated"
-	case "skip":
-		return "Skip"
-	case "rejected":
-		return "Rejected"
-	case "discarded":
-		return "Discarded"
-	default:
-		return norm
+func (m PipelineModel) statusLabel(norm string) string {
+	if state, ok := m.statusConfig.ByID[norm]; ok && state.Label != "" {
+		return state.Label
 	}
+	return norm
 }

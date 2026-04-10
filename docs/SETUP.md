@@ -2,79 +2,93 @@
 
 ## Prerequisites
 
-- [Claude Code](https://claude.ai/code) installed and configured
-- Node.js 18+ (for PDF generation and utility scripts)
-- (Optional) Go 1.21+ (for the dashboard TUI)
+- Codex available in your local workflow
+- Node.js 18+
+- Playwright Chromium for PDF generation and live page checks
+- Go 1.21+ if you want the dashboard
+- Bash if you want to use `batch/batch-runner.sh`
 
-## Quick Start (5 steps)
-
-### 1. Clone and install
+## Install
 
 ```bash
 git clone https://github.com/santifer/career-ops.git
 cd career-ops
 npm install
-npx playwright install chromium   # Required for PDF generation
+npx playwright install chromium
 ```
 
-### 2. Configure your profile
+PowerShell equivalent for the local copies:
+
+```powershell
+Copy-Item config/profile.example.yml config/profile.yml
+Copy-Item templates/portals.example.yml portals.yml
+```
+
+## Configure Your Local Data
 
 ```bash
 cp config/profile.example.yml config/profile.yml
-```
-
-Edit `config/profile.yml` with your personal details: name, email, target roles, narrative, proof points.
-
-### 3. Add your CV
-
-Create `cv.md` in the project root with your full CV in markdown format. This is the source of truth for all evaluations and PDFs.
-
-(Optional) Create `article-digest.md` with proof points from your portfolio projects/articles.
-
-### 4. Configure portals
-
-```bash
 cp templates/portals.example.yml portals.yml
 ```
 
-Edit `portals.yml`:
-- Update `title_filter.positive` with keywords matching your target roles
-- Add companies you want to track in `tracked_companies`
-- Customize `search_queries` for your preferred job boards
+Then create:
 
-### 5. Start using
+- `cv.md` in the repo root
+- `article-digest.md` if you want extra proof points
+- `modes/_profile.md` if you want user-specific archetypes or negotiation language
 
-Open Claude Code in this directory:
+## First Checks
 
 ```bash
-claude
+npm run doctor
+npm run verify
 ```
 
-Then paste a job offer URL or description. Career-ops will automatically evaluate it, generate a report, create a tailored PDF, and track it.
+## Start Using It With Codex
 
-## Available Commands
+Open Codex in the repo root and use prompts like:
 
-| Action | How |
-|--------|-----|
-| Evaluate an offer | Paste a URL or JD text |
-| Search for offers | `/career-ops scan` |
-| Process pending URLs | `/career-ops pipeline` |
-| Generate a PDF | `/career-ops pdf` |
-| Batch evaluate | `/career-ops batch` |
-| Check tracker status | `/career-ops tracker` |
-| Fill application form | `/career-ops apply` |
+- `Evaluate this job URL with the full career-ops pipeline.`
+- `Read modes/_shared.md and modes/pdf.md, then generate the tailored PDF for this JD.`
+- `Process the pending URLs in data/pipeline.md.`
 
-## Verify Setup
+## Batch
 
 ```bash
-node cv-sync-check.mjs      # Check configuration
-node verify-pipeline.mjs     # Check pipeline integrity
+./batch/batch-runner.sh --dry-run
+CAREER_OPS_BATCH_WORKER="codex exec" ./batch/batch-runner.sh --parallel 2
 ```
 
-## Build Dashboard (Optional)
+On Windows with Git Bash installed:
+
+```powershell
+& 'C:\Program Files\Git\bin\bash.exe' -lc "cd '/c/Users/<you>/path/to/career-ops' && ./batch/batch-runner.sh --dry-run"
+& 'C:\Program Files\Git\bin\bash.exe' -lc "cd '/c/Users/<you>/path/to/career-ops' && export CAREER_OPS_BATCH_WORKER='codex exec' && ./batch/batch-runner.sh --parallel 2"
+```
+
+If your CLI expects the prompt as a final argument instead of stdin:
 
 ```bash
-cd dashboard
+CAREER_OPS_BATCH_WORKER="codex exec" CAREER_OPS_BATCH_WORKER_INPUT=arg ./batch/batch-runner.sh --parallel 2
+```
+
+## Dashboard
+
+From the repo root:
+
+```bash
+go build -o dashboard/career-dashboard ./dashboard
+./dashboard/career-dashboard --path .
+```
+
+You can also run it from inside `dashboard/`:
+
+```bash
 go build -o career-dashboard .
-./career-dashboard --path ..  # Opens TUI pipeline viewer
+./career-dashboard --path ..
 ```
+
+## Known Limits
+
+- The documented non-interactive batch command is `codex exec`.
+- If your local Codex CLI expects prompt input differently, set `CAREER_OPS_BATCH_WORKER_INPUT=arg` or override `CAREER_OPS_BATCH_WORKER`.

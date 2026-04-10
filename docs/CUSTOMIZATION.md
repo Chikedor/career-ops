@@ -49,28 +49,10 @@ The negotiation section provides frameworks for salary discussions. Replace the 
 - Geographic arbitrage strategy
 - Pushback responses
 
-## Hooks (Optional)
+## Local Automation (Optional)
 
-Career-ops can integrate with external systems via Claude Code hooks. Example hooks:
-
-```json
-{
-  "hooks": {
-    "SessionStart": [{
-      "hooks": [{
-        "type": "command",
-        "command": "echo 'Career-ops session started'"
-      }]
-    }]
-  }
-}
-```
-
-Save hooks in `.claude/settings.json`.
+If your Codex setup supports local startup hooks or shell aliases, keep them outside the repo and point them at this folder. Career-ops itself does not require any Claude-specific hook system.
 
 ## States (templates/states.yml)
 
-The canonical states rarely need changing. If you add new states, update:
-1. `templates/states.yml`
-2. `normalize-statuses.mjs` (alias mappings)
-3. `modes/_shared.md` (any references)
+The canonical states rarely need changing. If you add or rename states, update `templates/states.yml` first. The scripts and dashboard now read from that file, so keep it as the source of truth.

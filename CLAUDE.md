@@ -1,5 +1,7 @@
 # Career-Ops -- AI Job Search Pipeline
 
+> Legacy compatibility document for Claude-oriented setups. For the primary Codex workflow, start with `AGENTS.md`, `CODEX.md`, and `docs/CODEX.md`.
+
 ## Origin
 
 This system was built and used by [santifer](https://santifer.io) to evaluate 740+ job offers, generate 100+ tailored CVs, and land a Head of Applied AI role. The archetypes, scoring logic, negotiation scripts, and proof point structure all reflect his specific career search in AI/automation roles.
@@ -43,7 +45,7 @@ To rollback: `node update-system.mjs rollback`
 
 ## What is career-ops
 
-AI-powered job search automation built on Claude Code: pipeline tracking, offer evaluation, CV generation, portal scanning, batch processing.
+Legacy Claude-oriented variant of the same local job-search automation system: pipeline tracking, offer evaluation, CV generation, portal scanning, and batch processing.
 
 ### Main Files
 
@@ -245,7 +247,7 @@ Default modes are in `modes/` (English). Additional language-specific modes are 
 2. `browser_snapshot` to read content
 3. Only footer/navbar without JD = closed. Title + description + Apply = active.
 
-**Exception for batch workers (`claude -p`):** Playwright is not available in headless pipe mode. Use WebFetch as fallback and mark the report header with `**Verification:** unconfirmed (batch mode)`. The user can verify manually later.
+**Legacy batch note:** Some non-interactive agent setups may not have Playwright available in pipe/headless mode. In those cases, use WebFetch as fallback and mark the report header with `**Verification:** unconfirmed (batch mode)`. The user can verify manually later.
 
 ---
 

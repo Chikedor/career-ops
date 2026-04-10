@@ -31,8 +31,9 @@ node_modules/
 *.mov
 *.mp4
 
-# Claude Code local
+# Local agent files
 .claude/settings.local.json
 .claude/memory/
 career-dashboard
+dashboard/*.exe
 package-lock.json
